@@ -123,6 +123,30 @@
             color: #888;
         }
 
+        #final-verdict {
+            margin-top: 25px;
+            font-size: 1.8em; /* Prominent font size */
+            font-weight: bold;
+            color: #28a745; /* Green for positive, will change for negative */
+            text-align: center;
+            padding: 15px 20px;
+            border-radius: 10px;
+            background-color: #e6ffee; /* Light green background */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            min-height: 50px; /* Ensure a consistent height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%; /* Take full width of container */
+            box-sizing: border-box; /* Include padding in width */
+            transition: all 0.3s ease; /* Smooth transition for color/background changes */
+        }
+
+        #final-verdict.negative {
+            color: #dc3545; /* Red for negative */
+            background-color: #ffe6e6; /* Light red background */
+        }
+
         /* Responsive adjustments */
         @media (max-width: 600px) {
             .container {
@@ -139,6 +163,10 @@
             #label-container {
                 font-size: 1.1em;
             }
+            #final-verdict {
+                font-size: 1.4em;
+                padding: 10px 15px;
+            }
         }
     </style>
 </head>
@@ -154,19 +182,21 @@
         <div id="label-container"></div>
         <div id="status-message">Click "Start" to begin.</div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <div id="final-verdict"></div> <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.com/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     <script type="text/javascript">
         // The link to your model provided by Teachable Machine export panel
         // IMPORTANT: Update this URL after re-training your model with improved data!
-        const URL = "https://teachablemachine.withgoogle.com/models/KM6Lbvj36/"; // **MAKE SURE TO UPDATE THIS**
+        const URL = "https://teachablemachine.withgoogle.com/models/KM6Lbvj36/"; // **모델 URL을 꼭 업데이트하세요!**
 
-        let model, webcam, labelContainer, maxPredictions, statusMessage;
+        let model, webcam, labelContainer, maxPredictions, statusMessage, finalVerdictContainer;
+        const SMILE_THRESHOLD = 0.7; // 미소로 판별할 최소 확률 (70% 이상)
 
         async function init() {
             statusMessage = document.getElementById("status-message");
+            finalVerdictContainer = document.getElementById("final-verdict");
             statusMessage.innerText = "Loading model...";
+            finalVerdictContainer.innerText = ""; // 초기화
 
             const modelURL = URL + "model.json";
             const metadataURL = URL + "metadata.json";
@@ -201,6 +231,8 @@
                 console.error("Error loading model or setting up webcam:", error);
                 statusMessage.innerText = 'Error: Check webcam permissions and model URL. (Details in console)';
                 labelContainer.innerHTML = ''; // Clear any partial labels
+                finalVerdictContainer.innerText = "모델 로딩 또는 웹캠 오류 발생.";
+                finalVerdictContainer.classList.add('negative');
             }
         }
 
@@ -215,13 +247,40 @@
         async function predict() {
             if (model && webcam && webcam.canvas) {
                 const prediction = await model.predict(webcam.canvas);
+                let smileProbability = 0;
+                let smileClassFound = false;
+
                 for (let i = 0; i < maxPredictions; i++) {
                     const className = prediction[i].className;
-                    const probability = (prediction[i].probability * 100).toFixed(1) + '%'; // One decimal place
+                    const probability = prediction[i].probability;
+
+                    // 'Smile' 클래스의 확률을 찾습니다. (클래스 이름이 정확히 'Smile'이어야 합니다)
+                    if (className.toLowerCase() === 'smile') {
+                        smileProbability = probability;
+                        smileClassFound = true;
+                    }
 
                     const predictionDiv = labelContainer.childNodes[i];
-                    predictionDiv.children[0].innerText = className; // Class Name
-                    predictionDiv.children[1].innerText = probability; // Probability
+                    predictionDiv.children[0].innerText = className;
+                    predictionDiv.children[1].innerText = (probability * 100).toFixed(1) + '%';
+                }
+
+                // 최종 판별 로직
+                if (smileClassFound) {
+                    if (smileProbability >= SMILE_THRESHOLD) {
+                        finalVerdictContainer.innerText = "😊 당신은 웃고 있습니다! 😊";
+                        finalVerdictContainer.classList.remove('negative');
+                        finalVerdictContainer.style.color = '#28a745';
+                        finalVerdictContainer.style.backgroundColor = '#e6ffee';
+                    } else {
+                        finalVerdictContainer.innerText = "😐 당신은 웃고 있지 않습니다. 😐";
+                        finalVerdictContainer.classList.add('negative');
+                        finalVerdictContainer.style.color = '#dc3545';
+                        finalVerdictContainer.style.backgroundColor = '#ffe6e6';
+                    }
+                } else {
+                    finalVerdictContainer.innerText = "모델에 'Smile' 클래스가 없습니다.";
+                    finalVerdictContainer.classList.add('negative');
                 }
             }
         }
